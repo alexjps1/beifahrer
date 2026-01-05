@@ -8,6 +8,14 @@ class Message(BaseModel):
     content: str
 
 
+class ChatRequest(BaseModel):
+    user_message_content: str
+
+
+class NewChatResponse(BaseModel):
+    chat_id: str
+
+
 class ChatResponse(BaseModel):
     message: Message
 
