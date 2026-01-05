@@ -20,6 +20,6 @@ urlpatterns = [
         name="redoc",
     ),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/chat/<str:chat_id>", views.chat_view, name="chat"),
+    path("api/chat/<str:chat_id>/", views.chat_view, name="chat"),
     path("api/chat/", views.post_new_chat, name="chat-new"),
 ]
