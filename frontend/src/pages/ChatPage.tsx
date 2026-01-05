@@ -21,6 +21,7 @@ export default function ChatPage(): React.ReactElement {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -39,6 +40,10 @@ export default function ChatPage(): React.ReactElement {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
+
+    useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
 
     const sendMessage = async (): Promise<void> => {
         if (!input.trim() || isLoading) return;
@@ -71,6 +76,7 @@ export default function ChatPage(): React.ReactElement {
             }
         } finally {
             setIsLoading(false);
+            inputRef.current?.focus();
         }
     };
 
@@ -89,7 +95,7 @@ export default function ChatPage(): React.ReactElement {
     ];
 
     return (
-        <div className="flex flex-col h-screen bg-background">
+        <div className="flex flex-col h-screen overflow-hidden bg-background">
             {/* Header */}
             <div className="border-b bg-primary text-primary-foreground p-4">
                 <div className="flex items-center gap-3 max-w-3xl mx-auto">
@@ -104,7 +110,7 @@ export default function ChatPage(): React.ReactElement {
             </div>
 
             {/* Messages Area */}
-            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+            <ScrollArea className="flex-1 min-h-0 px-4 py=0" ref={scrollRef}>
                 <div className="max-w-3xl mx-auto space-y-4">
                     {messages.length === 0 && (
                         <Card className="border-dashed">
@@ -178,6 +184,7 @@ export default function ChatPage(): React.ReactElement {
             <div className="border-t bg-background p-4">
                 <div className="max-w-3xl mx-auto flex gap-2">
                     <Input
+                        ref={inputRef}
                         value={input}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                             setInput(e.target.value)
