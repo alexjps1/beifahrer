@@ -2,4 +2,10 @@
     "venvPath": "./backend",
     "venv": ".venv",
     "extraPaths": ["./backend"],
+    "typeCheckingMode": "standard",
+    "executionEnvironments": [
+        {
+            "root": "./backend",
+        },
+    ],
 }
