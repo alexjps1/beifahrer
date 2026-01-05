@@ -15,12 +15,16 @@ from .schemas import (
 )
 
 
+@extend_schema(request=ChatRequest, responses=NewChatResponse)
 @api_view(["POST"])
-@extend_schema(responses=NewChatResponse)
-def post_new_chat(_request: Request) -> Response:
+def post_new_chat(request: Request) -> Response:
     """
-    Create a new chat and return its unique chat_id
+    Create a new chat with the first message and return chat_id + assistant response.
     """
+    user_content: str = request.data.get("user_message_content", "")
+    if not user_content:
+        return Response({"error": "Message content is required"}, status=400)
+
     # generate a unique chat_id with 6 digits
     generated_chat_id = str(random.randint(100000, 999999))
     unique: bool = False
@@ -31,10 +35,22 @@ def post_new_chat(_request: Request) -> Response:
         generated_chat_id = str(random.randint(100000, 999999))
     if not unique:
         return Response({"error": "Could not generate a unique chat_id"}, status=500)
+
+    assistant_content: str = f"user sent: {user_content}. llm response here."
+
     Chat.objects.create(
-        id=generated_chat_id, chat_name=f"Chat {generated_chat_id}", history=[]
+        id=generated_chat_id,
+        chat_name=f"Chat {generated_chat_id}",
+        history=[
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": assistant_content},
+        ],
     )
-    response: NewChatResponse = NewChatResponse(chat_id=generated_chat_id)
+
+    message: Message = Message(role="assistant", content=assistant_content)
+    response: NewChatResponse = NewChatResponse(
+        chat_id=generated_chat_id, message=message
+    )
     return Response(response.model_dump(), status=200)
 
 

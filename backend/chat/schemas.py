@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
 
 class NewChatResponse(BaseModel):
     chat_id: str
+    message: Message
 
 
 class ChatResponse(BaseModel):
