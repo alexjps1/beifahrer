@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate } from "react-router";
 import { RouterProvider } from "react-router/dom";
+import { Toaster } from "sonner";
 import ChatPage from "@/pages/ChatPage";
 import "./index.css";
 
@@ -23,5 +24,6 @@ const router = createBrowserRouter([
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <RouterProvider router={router} />
+        <Toaster />
     </StrictMode>,
 );

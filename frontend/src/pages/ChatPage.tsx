@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Car, Send, AlertCircle, Loader2 } from "lucide-react";
+import { Car, AlertCircle, Loader2, SendHorizontal, ArrowUpRight } from "lucide-react";
 import {
     sendChatMessage,
     getChatHistory,
@@ -13,6 +13,7 @@ import {
     isAxiosError,
     type Message,
 } from "@/api/client";
+import { toast } from "sonner";
 
 export default function ChatPage(): React.ReactElement {
     const { chatId: chatId } = useParams<{ chatId: string }>();
@@ -20,6 +21,7 @@ export default function ChatPage(): React.ReactElement {
     const [input, setInput] = useState<string>("");
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [chatIdInput, setChatIdInput] = useState<string>("");
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
@@ -36,14 +38,25 @@ export default function ChatPage(): React.ReactElement {
     }, [chatId]);
 
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     useEffect(() => {
-        inputRef.current?.focus();
-    }, []);
+        if (!isLoading) {
+            inputRef.current?.focus();
+        }
+    }, [isLoading]);
+
+    // figure out if chat id typed by user is valid and navigate if yes
+    const goToChatId = async (): Promise<void> => {
+        const targetId = chatIdInput.trim();
+        try {
+            await getChatHistory(targetId);
+            navigate(`/chat/${targetId}`);
+        } catch {
+            toast.error("Chat not found");
+        }
+    }
 
     const sendMessage = async (): Promise<void> => {
         if (!input.trim() || isLoading) return;
@@ -76,7 +89,6 @@ export default function ChatPage(): React.ReactElement {
             }
         } finally {
             setIsLoading(false);
-            inputRef.current?.focus();
         }
     };
 
@@ -106,12 +118,38 @@ export default function ChatPage(): React.ReactElement {
                             Driver assistance systems guide
                         </p>
                     </div>
+                    <div className="ml-auto text-foreground rounded-md">
+                        <div className="flex items-center">
+                            <Input
+                                className="w-25 bg-white flex-1 rounded-r-none border-r-0"
+                                placeholder="Chat ID"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    setChatIdInput(e.target.value)
+                                }
+                                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                                    if (e.key === "Enter" && /^\d{6}$/.test(chatIdInput.trim())) {
+                                        e.preventDefault();
+                                        goToChatId();
+                                    }
+                                }}
+                                maxLength={6}
+                            />
+                            <Button
+                                variant="outline"
+                                className="rounded-l-none"
+                                onClick={goToChatId}
+                                disabled={!/^\d{6}$/.test(chatIdInput.trim())}
+                            >
+                                <ArrowUpRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* Messages Area */}
-            <ScrollArea className="flex-1 min-h-0 px-4 py=0" ref={scrollRef}>
-                <div className="max-w-3xl mx-auto space-y-4">
+            <ScrollArea className="flex-1 min-h-0 px-4 py-0">
+                <div className="max-w-3xl mx-auto space-y-4 py-4">
                     {messages.length === 0 && (
                         <Card className="border-dashed">
                             <CardHeader className="text-center pb-2">
@@ -177,12 +215,13 @@ export default function ChatPage(): React.ReactElement {
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     )}
+                    <div ref={scrollRef} />
                 </div>
             </ScrollArea>
 
             {/* Input Area */}
             <div className="border-t bg-background p-4">
-                <div className="max-w-3xl mx-auto flex gap-2">
+                <div className="max-w-3xl mx-auto flex">
                     <Input
                         ref={inputRef}
                         value={input}
@@ -192,16 +231,17 @@ export default function ChatPage(): React.ReactElement {
                         onKeyDown={handleKeyDown}
                         placeholder="Ask about driver assistance systems..."
                         disabled={isLoading}
-                        className="flex-1"
+                        className="bg-white flex-1 rounded-r-none border-r-0"
                     />
                     <Button
                         onClick={sendMessage}
                         disabled={isLoading || !input.trim()}
+                        className="rounded-l-none"
                     >
                         {isLoading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                            <Send className="h-4 w-4" />
+                            <SendHorizontal className="h-4 w-4" />
                         )}
                     </Button>
                 </div>
