@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Car, AlertCircle, Loader2, SendHorizontal, ArrowUpRight } from "lucide-react";
+import {
+    Car,
+    AlertCircle,
+    Loader2,
+    SendHorizontal,
+    ArrowUpRight,
+} from "lucide-react";
 import {
     sendChatMessage,
     getChatHistory,
@@ -56,27 +62,36 @@ export default function ChatPage(): React.ReactElement {
         } catch {
             toast.error("Chat not found");
         }
-    }
+    };
 
     const sendMessage = async (): Promise<void> => {
         if (!input.trim() || isLoading) return;
 
         const userMessageContent: string = input.trim();
 
-        if (!chatId) {
-            const response = await createChat(userMessageContent);
-            navigate(`/chat/${response.chat_id}`, {replace: true});
-            return;
-        }
-
-        setMessages((prev) => [...prev, { role: "user", content: userMessageContent }]);
+        // Immediately show user message
+        setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessageContent },
+        ]);
         setInput("");
         setIsLoading(true);
         setError(null);
 
         try {
-            const response = await sendChatMessage(chatId, input.trim());
-            setMessages((prev) => [...prev, response.message]);
+            if (!chatId) {
+                // First message - create new chat
+                const response = await createChat(userMessageContent);
+                setMessages((prev) => [...prev, response.message]);
+                navigate(`/chat/${response.chat_id}`, { replace: true });
+            } else {
+                // Subsequent message - send to existing chat
+                const response = await sendChatMessage(
+                    chatId,
+                    userMessageContent,
+                );
+                setMessages((prev) => [...prev, response.message]);
+            }
         } catch (err) {
             if (isAxiosError(err)) {
                 const errorMessage =
@@ -100,10 +115,10 @@ export default function ChatPage(): React.ReactElement {
     };
 
     const suggestedQuestions: string[] = [
-        "What is Lane Keeping Assist?",
-        "How does Adaptive Cruise Control work?",
+        "Was ist der Spurführungsassistent?",
         "Was ist Abstandsregelung?",
-        "Are these systems safe to rely on?",
+        "Sind diese Systeme zu 100% sicher?",
+        "Wie schalte ich diese Funktionien ein oder aus?",
     ];
 
     return (
@@ -123,11 +138,16 @@ export default function ChatPage(): React.ReactElement {
                             <Input
                                 className="w-25 bg-white flex-1 rounded-r-none border-r-0"
                                 placeholder="Chat ID"
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                    setChatIdInput(e.target.value)
-                                }
-                                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                                    if (e.key === "Enter" && /^\d{6}$/.test(chatIdInput.trim())) {
+                                onChange={(
+                                    e: React.ChangeEvent<HTMLInputElement>,
+                                ) => setChatIdInput(e.target.value)}
+                                onKeyDown={(
+                                    e: React.KeyboardEvent<HTMLInputElement>,
+                                ) => {
+                                    if (
+                                        e.key === "Enter" &&
+                                        /^\d{6}$/.test(chatIdInput.trim())
+                                    ) {
                                         e.preventDefault();
                                         goToChatId();
                                     }
@@ -150,6 +170,7 @@ export default function ChatPage(): React.ReactElement {
             {/* Messages Area */}
             <ScrollArea className="flex-1 min-h-0 px-4 py-0">
                 <div className="max-w-3xl mx-auto space-y-4 py-4">
+                    {/* show welcome card if no messages yet */}
                     {messages.length === 0 && (
                         <Card className="border-dashed">
                             <CardHeader className="text-center pb-2">
@@ -178,6 +199,7 @@ export default function ChatPage(): React.ReactElement {
                         </Card>
                     )}
 
+                    {/* show messages from history */}
                     {messages.map((msg, i) => (
                         <div
                             key={i}
@@ -199,6 +221,7 @@ export default function ChatPage(): React.ReactElement {
                         </div>
                     ))}
 
+                    {/* Show loading spinner while LLM is generating response */}
                     {isLoading && (
                         <div className="flex justify-start">
                             <Card className="bg-muted py-0">
@@ -209,6 +232,7 @@ export default function ChatPage(): React.ReactElement {
                         </div>
                     )}
 
+                    {/* Show error box if error from backend while generating response */}
                     {error && (
                         <Alert variant="destructive">
                             <AlertCircle className="h-4 w-4" />
