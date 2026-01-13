@@ -13,6 +13,7 @@ from .schemas import (
     Message,
     NewChatResponse,
 )
+from .services.agent import generate_response
 
 
 @extend_schema(request=ChatRequest, responses=NewChatResponse)
@@ -36,7 +37,8 @@ def post_new_chat(request: Request) -> Response:
     if not unique:
         return Response({"error": "Could not generate a unique chat_id"}, status=500)
 
-    assistant_content: str = f"user sent: {user_content}. llm response here."
+    # Generate AI response using RAG
+    assistant_content: str = generate_response(user_content, chat_history=[])
 
     Chat.objects.create(
         id=generated_chat_id,
@@ -70,12 +72,14 @@ def post_message(request: Request, chat_id: str) -> Response:
     Assumes chat_id is valid and associated with a chat.
     """
     user_content: str = request.data.get("user_message_content", "")
-    assistant_content: str = f"user sent: {user_content}. llm response here."
 
     chat, _created = Chat.objects.get_or_create(
         id=chat_id,
         defaults={"chat_name": f"Chat {chat_id}", "history": []},
     )
+
+    # Generate AI response using RAG with conversation history
+    assistant_content: str = generate_response(user_content, chat_history=chat.history)
 
     chat.history.append({"role": "user", "content": user_content})
     chat.history.append({"role": "assistant", "content": assistant_content})
