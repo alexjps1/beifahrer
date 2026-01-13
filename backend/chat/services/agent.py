@@ -1,8 +1,8 @@
 import os
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
 from .retriever import retrieve_context
@@ -42,7 +42,16 @@ def generate_response(user_message: str, chat_history: list[dict] = None) -> str
         # Step 1: Retrieve relevant context from the knowledge base
         context = retrieve_context(user_message, k=3)
 
-        # Step 2: Build the prompt
+        # Step 2: Convert chat history to LangChain message format
+        history_messages = []
+        if chat_history:
+            for msg in chat_history:
+                if msg["role"] == "user":
+                    history_messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    history_messages.append(AIMessage(content=msg["content"]))
+
+        # Step 3: Build the prompt with conversation history
         system_prompt = """Du bist ein hilfreicher Fahrassistent für ein teilautomatisiertes Fahrzeug.
 Deine Aufgabe ist es, Fragen zu den Fahrerassistenzsystemen zu beantworten.
 
@@ -56,21 +65,35 @@ Richtlinien:
 - Wenn die Informationen nicht ausreichen, sage ehrlich, dass du keine vollständige Antwort geben kannst
 - Sei hilfsbereit und sicherheitsbewusst
 - Halte deine Antworten kurz und auf den Punkt gebracht
+- Beachte die vorherige Konversation, um im Kontext zu antworten
 """
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                ("human", "{user_message}"),
-            ]
-        )
+        # Build messages for the prompt
+        messages = [("system", system_prompt)]
 
-        # Step 3: Create the chain using LCEL (LangChain Expression Language)
+        # Add conversation history if available
+        if history_messages:
+            messages.append(MessagesPlaceholder(variable_name="history"))
+
+        # Add current user message
+        messages.append(("human", "{user_message}"))
+
+        prompt = ChatPromptTemplate.from_messages(messages)
+
+        # Step 4: Create the chain using LCEL (LangChain Expression Language)
         llm = get_llm()
         chain = prompt | llm | StrOutputParser()
 
-        # Step 4: Generate response
-        response = chain.invoke({"context": context, "user_message": user_message})
+        # Step 5: Generate response
+        invoke_params = {
+            "context": context,
+            "user_message": user_message,
+        }
+
+        if history_messages:
+            invoke_params["history"] = history_messages
+
+        response = chain.invoke(invoke_params)
 
         return response.strip()
 
