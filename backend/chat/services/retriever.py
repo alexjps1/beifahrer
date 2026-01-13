@@ -6,7 +6,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 # Constants
 THIS_DIR = Path(__file__).resolve().parent
-CHROMA_DB_PATH = str(THIS_DIR.parent.parent / "chroma_db")
+CHROMA_DB_PATH = str(THIS_DIR.parent.parent / "knowledge" / "chroma_db")
 
 # Global retriever instance (lazy loaded)
 _vectorstore = None
@@ -21,7 +21,6 @@ def get_vectorstore() -> Chroma:
     if _vectorstore is None:
         embeddings = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
         _vectorstore = Chroma(

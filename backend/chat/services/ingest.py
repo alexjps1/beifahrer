@@ -9,7 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # constants
 THIS_DIR = Path(__file__).resolve().parent
-CHROMA_DB_PATH = str(THIS_DIR.parent.parent / "chroma_db")
+CHROMA_DB_PATH = str(THIS_DIR.parent.parent / "knowledge" / "chroma_db")
 
 
 def load_file_to_documents(filepath: str) -> list[Document]:
@@ -38,7 +38,6 @@ def ingest_files(filepaths: list[str]):
     print("Creating embeddings model...")
     embeddings = HuggingFaceEmbeddings(
         model_name="all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
     for filepath in filepaths:
