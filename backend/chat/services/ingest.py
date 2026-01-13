@@ -2,9 +2,9 @@ import argparse
 from pathlib import Path
 
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import BSHTMLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import BSHTMLLoader
 from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # constants
@@ -17,7 +17,7 @@ def load_file_to_documents(filepath: str) -> list[Document]:
     Loads an HTML file and chunks it into a list of LangChain Document objects.
     """
     # load html documents and strip html tags
-    loader = BSHTMLoader(filepath)
+    loader = BSHTMLLoader(filepath)
     documents: list[Document] = loader.load()
 
     # split documents into chunks for better semantic search
@@ -29,14 +29,20 @@ def load_file_to_documents(filepath: str) -> list[Document]:
 
 def store_embeddings(docs: list[Document], embeddings: HuggingFaceEmbeddings) -> Chroma:
     vectorstore = Chroma.from_documents(
-        documents=docs, embeddings=embeddings, persist_directory=CHROMA_DB_PATH
+        documents=docs, embedding=embeddings, persist_directory=CHROMA_DB_PATH
     )
     return vectorstore
 
 
 def ingest_files(filepaths: list[str]):
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    print("Creating embeddings model...")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
+    )
     for filepath in filepaths:
+        print(f"Embedding file {filepath}...")
         docs: list[Document] = load_file_to_documents(filepath)
         store_embeddings(docs, embeddings)
     print("Done storing requested files in Chroma database.")
@@ -61,4 +67,5 @@ if __name__ == "__main__":
     else:
         filepaths = args.i
 
+    print(f"Ingesting files: {filepaths}")
     ingest_files(filepaths)
