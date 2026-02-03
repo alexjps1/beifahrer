@@ -119,7 +119,7 @@ def generate_followup_questions(survey_answers: dict[str, Any]) -> dict[str, str
     >>> print(questions["question1"])
 
     """
-    system_prompt = """Du bist ein Experte für Fahrerassistenzsysteme und hilfst dabei, das Wissen von Fahrern einzuschätzen.
+    system_prompt = """Du bist ein Experte für Fahrerassistenzsysteme und hilfst dabei, die Vertrautheit von Fahrern mit diesen Systemen einzuschätzen.
 
 Basierend auf den Selbsteinschätzungen eines Fahrers zu verschiedenen Assistenzsystemen sollst du drei gezielte Folgefragen entwickeln.
 
@@ -138,12 +138,28 @@ Für jedes System gibt es:
 Deine Aufgabe:
 1. Identifiziere Systeme, bei denen es Diskrepanzen zwischen praktischer und theoretischer Erfahrung gibt
 2. Konzentriere dich auf Systeme mit mittlerer Erfahrung (wo Unsicherheiten wahrscheinlich sind)
-3. Formuliere drei offene Fragen, die helfen, die tatsächliche Kompetenz besser einzuschätzen
+3. Formuliere drei offene Fragen, die helfen, die tatsächliche Vertrautheit besser einzuschätzen
+
+WICHTIG – Ziel der Fragen:
+Die Fragen sollen die VERTRAUTHEIT des Fahrers mit dem System einschätzen, NICHT sein technisches Wissen abfragen. Es geht nicht darum zu testen, ob der Fahrer weiß, wie ein System funktioniert oder was er in einer kritischen Situation tun sollte. Stattdessen sollen die Fragen herausfinden, wie viel alltägliche Erfahrung und Umgang der Fahrer mit dem System hat.
+
+Gute Themen für Fragen:
+- Wie lange und wie regelmäßig der Fahrer das System genutzt hat
+- Ob das System im eigenen Auto vorhanden war oder nur in einem Mietwagen o.ä.
+- Wie oft das System im Alltag aktiv war oder genutzt wurde
+- Ob der Fahrer weiß, wie man das System ein- und ausschaltet
+- Welche Funktionen oder Einstellungen das System im eigenen Fahrzeug hatte
+- Ob der Fahrer das System bewusst verwendet oder eher passiv erlebt hat
+
+VERMEIDE folgende Fragetypen:
+- Fragen nach konkreten kritischen Situationen oder Beinahe-Unfällen
+- Prüfungsfragen, die technisches Wissen testen (z.B. "Was passiert, wenn...")
+- Fragen, die wie eine Wissensabfrage wirken
 
 Die Fragen sollten:
 - Offen formuliert sein (nicht ja/nein)
-- Spezifische Situationen oder Funktionen ansprechen
-- Praktisches Verständnis prüfen
+- Den alltäglichen Umgang und die Nutzungserfahrung ansprechen
+- Einen gesprächigen, nicht prüfenden Ton haben
 - Auf Deutsch sein
 """
 
@@ -172,9 +188,9 @@ Die Fragen sollten:
         print(f"Error generating follow-up questions: {e}")
         # Return default questions on error
         return {
-            "question1": "Können Sie beschreiben, wie der Abstandsregeltempomat funktioniert?",
-            "question2": "In welchen Situationen würden Sie den Spurführungsassistenten nutzen?",
-            "question3": "Was sollten Sie tun, wenn der Notbremsassistent aktiviert wird?",
+            "question1": "Wie lange nutzen Sie den Abstandsregeltempomat schon und wie regelmäßig setzen Sie ihn ein?",
+            "question2": "Ist der Spurführungsassistent in Ihrem eigenen Auto verbaut, und wenn ja, haben Sie ihn bewusst aktiviert oder läuft er automatisch?",
+            "question3": "Haben Sie den Notbremsassistenten schon einmal in Ihrem Fahrzeug bemerkt – zum Beispiel durch eine Warnung oder ein Eingreifen?",
         }
 
 
