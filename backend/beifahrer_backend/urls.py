@@ -31,4 +31,19 @@ urlpatterns = [
         curriculum_views.post_survey_answers,
         name="survey-answers",
     ),
+    path(
+        "api/curriculum/followup-questions",
+        curriculum_views.post_generate_followup_questions,
+        name="followup-questions",
+    ),
+    path(
+        "api/curriculum/followup-answers",
+        curriculum_views.post_followup_answers,
+        name="followup-answers",
+    ),
+    path(
+        "api/curriculum/recommended-chapters",
+        curriculum_views.get_recommended_chapters,
+        name="recommended-chapters",
+    ),
 ]

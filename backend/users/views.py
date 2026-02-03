@@ -83,8 +83,9 @@ def post_upsert_user(request: Request) -> Response:
         onboarding_user_id=data.onboarding_user_id or "",
         user_name=data.user_name,
         survey_answers={},
-        followup_answers=[],
-        recommended_chapters=[],
+        followup_questions={},
+        followup_answers={},
+        recommended_chapters={},
         chat_ids=[],
         agent_scratchpad={},
     )
@@ -93,7 +94,7 @@ def post_upsert_user(request: Request) -> Response:
 
 @extend_schema(responses={204: None, 404: ErrorResponse})
 @api_view(["DELETE"])
-def delete_user(_request: Request, any_user_id: str) -> Response:
+def delete_user(_request: Request, user_id: str) -> Response:
     """
     Delete a User by either their Beifahrer user_id or onboarding_user_id.
 
@@ -120,11 +121,11 @@ def delete_user(_request: Request, any_user_id: str) -> Response:
 
     """
     # Try to find user by beifahrer user_id first (UUID format)
-    user_to_delete = User.objects.filter(user_id=any_user_id)
+    user_to_delete = User.objects.filter(user_id=user_id)
 
     # If not found, try to find by onboarding_user_id
     if not user_to_delete.exists():
-        user_to_delete = User.objects.filter(onboarding_user_id=any_user_id)
+        user_to_delete = User.objects.filter(onboarding_user_id=user_id)
 
     # TODO delete all chats (once chat functionality is implemented)
 

@@ -4,7 +4,7 @@ by Alexander João Peterson Santos
 TUM Lehrstuhl für Ergonomie
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # Helpers
@@ -81,3 +81,93 @@ class ErrorResponse(BaseModel):
     """
 
     error: str
+
+
+# New Requests/Responses for Follow-up Questions and Recommendations
+class UserIdRequest(BaseModel):
+    """
+    Request containing only a user ID.
+
+    Attributes
+    ----------
+    user_id : str
+        Either Beifahrer UUID or onboarding_user_id
+    """
+
+    user_id: str
+
+
+class FollowUpQuestionsResponse(BaseModel):
+    """
+    Response containing follow-up questions.
+
+    Attributes
+    ----------
+    question1 : str
+        First follow-up question
+    question2 : str
+        Second follow-up question
+    question3 : str
+        Third follow-up question
+    """
+
+    question1: str
+    question2: str
+    question3: str
+
+
+class QuestionAnswerPair(BaseModel):
+    """
+    Single question-answer pair.
+
+    Attributes
+    ----------
+    q : str
+        Question text
+    a : str
+        Answer text
+    """
+
+    q: str
+    a: str
+
+
+class FollowUpAnswersRequest(BaseModel):
+    """
+    Request to submit follow-up question answers.
+
+    Attributes
+    ----------
+    user_id : str
+        Either Beifahrer UUID or onboarding_user_id
+    answers : list[QuestionAnswerPair]
+        List of question-answer pairs
+    """
+
+    user_id: str
+    answers: list[QuestionAnswerPair]
+
+
+class RecommendedChaptersResponse(BaseModel):
+    """
+    Response containing recommended curriculum chapters.
+
+    Attributes
+    ----------
+    Abstandsregeltempomat : bool
+        User must read adaptive cruise control chapter
+    Ampelerkennung : bool
+        User must read traffic light recognition chapter
+    Notbremsassistent : bool
+        User must read emergency brake assistant chapter
+    Spurführungsassistent : bool
+        User must read lane keeping assistant chapter
+    Verkehrszeichenassistent : bool
+        User must read traffic sign assistant chapter
+    """
+
+    Abstandsregeltempomat: bool
+    Ampelerkennung: bool
+    Notbremsassistent: bool
+    Spurführungsassistent: bool
+    Verkehrszeichenassistent: bool

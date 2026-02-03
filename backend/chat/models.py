@@ -10,6 +10,3 @@ class Chat(models.Model):
 
     class Meta:
         db_table = "chats"
-
-    def __str__(self):
-        return self.chat_name

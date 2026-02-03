@@ -6,12 +6,12 @@ TUM Lehrstuhl für Ergonomie
 """
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 # Initialize OpenAI LLM
 _llm = None
@@ -32,7 +32,7 @@ def get_llm() -> ChatOpenAI:
         _llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0.7,
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=cast(SecretStr, os.getenv("OPENAI_API_KEY")),
         )
     return _llm
 

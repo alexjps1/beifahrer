@@ -43,6 +43,7 @@ class User(models.Model):
     user_name = models.CharField(editable=False)
 
     survey_answers = models.JSONField(default=dict)
+    followup_questions = models.JSONField(default=dict)
     followup_answers = models.JSONField(default=dict)
     recommended_chapters = models.JSONField(default=dict)
 
