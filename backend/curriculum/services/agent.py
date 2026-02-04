@@ -137,8 +137,21 @@ Für jedes System gibt es:
 
 Deine Aufgabe:
 1. Identifiziere Systeme, bei denen es Diskrepanzen zwischen praktischer und theoretischer Erfahrung gibt
-2. Konzentriere dich auf Systeme mit mittlerer Erfahrung (wo Unsicherheiten wahrscheinlich sind)
+2. Konzentriere dich auf Systeme mit mittlerer Erfahrung (mean zwischen 1.5 und 3, oder practical/theoretical zwischen 1 und 3)
 3. Formuliere drei offene Fragen, die helfen, die tatsächliche Vertrautheit besser einzuschätzen
+
+KRITISCH – Diversifizierung der Fragen:
+- Jede der drei Fragen MUSS sich auf ein ANDERES Fahrerassistenzsystem beziehen
+- Verteile die Fragen über verschiedene Systeme, um ein breites Verständnis zu bekommen
+- Priorisiere Systeme mit "mittleren" Bewertungen (2-4), da hier die größte Unsicherheit besteht
+- Wenn mehrere Systeme in Frage kommen, wähle drei unterschiedliche aus
+- VERMEIDE es, alle drei Fragen auf dasselbe System zu fokussieren
+
+Prioritäten bei der System-Auswahl:
+1. Systeme mit mean-Werten zwischen 1.5 und 2.5 (höchste Priorität – "eher wenig" bis "etwas")
+2. Systeme mit Diskrepanzen zwischen practical und theoretical (Differenz > 1)
+3. Systeme mit einzelnen Werten von 1 oder 2 (auch wenn mean höher ist)
+4. Falls möglich, mindestens ein System mit niedriger practical-Erfahrung und eines mit niedriger theoretical-Erfahrung
 
 WICHTIG – Ziel der Fragen:
 Die Fragen sollen die VERTRAUTHEIT des Fahrers mit dem System einschätzen, NICHT sein technisches Wissen abfragen. Es geht nicht darum zu testen, ob der Fahrer weiß, wie ein System funktioniert oder was er in einer kritischen Situation tun sollte. Stattdessen sollen die Fragen herausfinden, wie viel alltägliche Erfahrung und Umgang der Fahrer mit dem System hat.
@@ -161,6 +174,7 @@ Die Fragen sollten:
 - Den alltäglichen Umgang und die Nutzungserfahrung ansprechen
 - Einen gesprächigen, nicht prüfenden Ton haben
 - Auf Deutsch sein
+- Sich jeweils auf unterschiedliche Systeme beziehen
 """
 
     prompt = ChatPromptTemplate.from_messages(
