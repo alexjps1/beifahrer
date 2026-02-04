@@ -280,11 +280,13 @@ Ein Fahrer MUSS NICHT lesen (must_read: false), wenn ALLE folgenden Bedingungen 
   * Sowohl practical als auch theoretical >= 3
   * Falls Folgefragen gestellt wurden: Antworten zeigen klare Vertrautheit
 
-KRITISCH – Umgang mit fehlenden Folgefragen:
-- Wenn zu diesem System KEINE Folgefragen gestellt wurden, entscheide AUSSCHLIESSLICH anhand der Survey-Werte
+KRITISCH – Umgang mit Folgefragen:
+- Du erhältst NUR die Folgefragen, die sich SPEZIFISCH auf das aktuelle System beziehen
+- Wenn "Keine Folgefragen zu [System] wurden gestellt" angezeigt wird, entscheide AUSSCHLIESSLICH anhand der Survey-Werte
 - Das Fehlen von Folgefragen bedeutet NICHT, dass das System unwichtig ist
 - Niedrige Survey-Werte (practical oder theoretical <= 1) sind allein ausreichend für must_read: true
-- Folgefragen sind zusätzliche Information, aber nicht erforderlich für die Entscheidung
+- Verwende NIEMALS Informationen aus Folgefragen zu anderen Systemen
+- Wenn Folgefragen vorhanden sind, bewerte sie ehrlich: Zeigen sie echte Vertrautheit oder Unsicherheit?
 
 Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (must_read: true).
 """
@@ -332,6 +334,20 @@ Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
                 system, {"mean": 0, "practical": 0, "theoretical": 0}
             )
 
+            # Filter follow-up questions that are relevant to this system
+            # Check if the system name appears in the question text
+            relevant_qa = [
+                qa for qa in followup_qa if system.lower() in qa.get("q", "").lower()
+            ]
+
+            # Format follow-up info
+            if relevant_qa:
+                followup_info = f"Folgefragen zu {system}:\n"
+                for qa in relevant_qa:
+                    followup_info += f"Frage: {qa.get('q', 'N/A')}\nAntwort: {qa.get('a', 'N/A')}\n\n"
+            else:
+                followup_info = f"Keine Folgefragen zu {system} wurden gestellt."
+
             # Invoke the chain for this system
             result = chain.invoke(
                 {
@@ -339,7 +355,7 @@ Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
                     "practical": system_data.get("practical", 0),
                     "theoretical": system_data.get("theoretical", 0),
                     "mean": system_data.get("mean", 0),
-                    "followup_qa": str(followup_qa),
+                    "followup_qa": followup_info,
                 }
             )
 
@@ -347,7 +363,20 @@ Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
 
             # Print the decision and reasoning
             decision = "MUST READ" if result.must_read else "SKIP"
-            print(f"[{system}] {decision}: {result.reasoning}")
+            print(f"\n[{system}] {decision}")
+            print(
+                f"Survey: practical={system_data.get('practical', 0)}, theoretical={system_data.get('theoretical', 0)}, mean={system_data.get('mean', 0)}"
+            )
+
+            # Print relevant Q&A if any
+            if relevant_qa:
+                for idx, qa in enumerate(relevant_qa, 1):
+                    print(f"  Q{idx}: {qa.get('q', 'N/A')}")
+                    print(f"  A{idx}: {qa.get('a', 'N/A')}")
+            else:
+                print(f"  (Keine Folgefragen zu diesem System)")
+
+            print(f"Reasoning: {result.reasoning}")
 
         except Exception as e:
             print(f"Error evaluating {system}: {e}")
