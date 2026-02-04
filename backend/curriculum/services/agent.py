@@ -215,7 +215,8 @@ def generate_recommended_chapters(
     Generate curriculum chapter recommendations based on survey and follow-up answers.
 
     Uses GPT to analyze both the initial survey responses and follow-up Q&A to determine
-    which manual chapters the user should read before driving.
+    which manual chapters the user should read before driving. Evaluates each system
+    individually to avoid bias toward systems with follow-up questions.
 
     Parameters
     ----------
@@ -241,30 +242,51 @@ def generate_recommended_chapters(
     True
 
     """
+
+    # Define a simple Pydantic model for single system recommendation
+    class SingleSystemRecommendation(BaseModel):
+        """Schema for a single system's chapter recommendation."""
+
+        must_read: bool = Field(
+            description="True if user must read this chapter before driving"
+        )
+        reasoning: str = Field(description="Brief explanation for the decision")
+
     system_prompt = """Du bist ein Experte für Fahrerassistenzsysteme und Fahrsicherheit.
 
-Deine Aufgabe ist es, basierend auf den Selbsteinschätzungen eines Fahrers und seinen Antworten auf Folgefragen zu entscheiden, welche Kapitel des Fahrzeughandbuchs der Fahrer VOR der Fahrt lesen MUSS.
+Deine Aufgabe ist es, basierend auf den Selbsteinschätzungen eines Fahrers zu einem SPEZIFISCHEN System und allen verfügbaren Folgefragen zu entscheiden, ob der Fahrer das entsprechende Kapitel des Fahrzeughandbuchs VOR der Fahrt lesen MUSS.
 
-Die fünf Assistenzsysteme sind:
-- Abstandsregeltempomat (Adaptive Cruise Control)
-- Ampelerkennung (Traffic Light Recognition)
-- Notbremsassistent (Emergency Brake Assistant)
-- Spurführungsassistent (Lane Keeping Assistant)
-- Verkehrszeichenassistent (Traffic Sign Assistant)
+Bewertungsskala:
+- 0: Keine Erfahrung
+- 1: Sehr wenig Erfahrung
+- 2: Etwas Erfahrung
+- 3: Gute Erfahrung
+- 4: Sehr gute Erfahrung
+
+WICHTIG – Unabhängige Bewertung:
+Du bewertest NUR das aktuelle System. Die Bewertungen für andere Systeme sind irrelevant.
 
 Bewertungskriterien:
-- Ein Fahrer MUSS ein Kapitel lesen (true), wenn:
-  * Die Selbsteinschätzung niedrig ist (mean < 2)
-  * Große Diskrepanz zwischen praktischer und theoretischer Erfahrung besteht
-  * Die Folgeantworten zeigen, dass wichtiges Wissen fehlt
-  * Sicherheitsrelevante Missverständnisse erkennbar sind
+Ein Fahrer MUSS ein Kapitel lesen (must_read: true), wenn eine oder mehrere der folgenden Bedingungen zutreffen:
+  * Die Selbsteinschätzung ist niedrig (mean < 2)
+  * practical-Wert ist 0 oder 1 (sehr wenig oder keine praktische Erfahrung)
+  * theoretical-Wert ist 0 oder 1 (sehr wenig oder kein theoretisches Wissen)
+  * Große Diskrepanz zwischen practical und theoretical besteht (Differenz >= 2)
+  * Falls Folgefragen zu diesem System gestellt wurden: Die Antworten zeigen Unsicherheit oder fehlendes Verständnis
+  * Bei Werten von 2 ("etwas Erfahrung"): Nur wenn zusätzlich Folgeantworten Probleme aufzeigen
 
-- Ein Fahrer MUSS NICHT lesen (false), wenn:
-  * Gute Selbsteinschätzung (mean >= 3) UND solide Folgeantworten
-  * Klare Demonstration von Verständnis in den Antworten
-  * Sowohl praktische als auch theoretische Kompetenz vorhanden
+Ein Fahrer MUSS NICHT lesen (must_read: false), wenn ALLE folgenden Bedingungen erfüllt sind:
+  * Gute Selbsteinschätzung (mean >= 3)
+  * Sowohl practical als auch theoretical >= 3
+  * Falls Folgefragen gestellt wurden: Antworten zeigen klare Vertrautheit
 
-Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (true).
+KRITISCH – Umgang mit fehlenden Folgefragen:
+- Wenn zu diesem System KEINE Folgefragen gestellt wurden, entscheide AUSSCHLIESSLICH anhand der Survey-Werte
+- Das Fehlen von Folgefragen bedeutet NICHT, dass das System unwichtig ist
+- Niedrige Survey-Werte (practical oder theoretical <= 1) sind allein ausreichend für must_read: true
+- Folgefragen sind zusätzliche Information, aber nicht erforderlich für die Entscheidung
+
+Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (must_read: true).
 """
 
     prompt = ChatPromptTemplate.from_messages(
@@ -272,34 +294,64 @@ Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (true).
             ("system", system_prompt),
             (
                 "human",
-                """Selbsteinschätzungen:
-{survey_answers}
+                """System: {system_name}
 
-Folgefragen und Antworten:
+Selbsteinschätzung für dieses System:
+- Praktische Erfahrung: {practical}
+- Theoretisches Wissen: {theoretical}
+- Durchschnitt: {mean}
+
+Alle Folgefragen und Antworten (falls welche zu diesem System existieren):
 {followup_qa}
 
-Entscheide für jedes System, ob der Fahrer das entsprechende Kapitel lesen muss.""",
+Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
             ),
         ]
     )
 
     llm = get_llm()
-    llm_with_structure = llm.with_structured_output(RecommendedChapters)
-
+    llm_with_structure = llm.with_structured_output(SingleSystemRecommendation)
     chain = prompt | llm_with_structure
 
-    try:
-        result = chain.invoke(
-            {"survey_answers": str(survey_answers), "followup_qa": str(followup_qa)}
-        )
-        return result.model_dump()
-    except Exception as e:
-        print(f"Error generating recommended chapters: {e}")
-        # Conservative default: recommend all chapters on error
-        return {
-            "Abstandsregeltempomat": True,
-            "Ampelerkennung": True,
-            "Notbremsassistent": True,
-            "Spurführungsassistent": True,
-            "Verkehrszeichenassistent": True,
-        }
+    # List of all systems to evaluate
+    systems = [
+        "Abstandsregeltempomat",
+        "Ampelerkennung",
+        "Notbremsassistent",
+        "Spurführungsassistent",
+        "Verkehrszeichenassistent",
+    ]
+
+    recommendations = {}
+
+    # Evaluate each system individually
+    for system in systems:
+        try:
+            # Get ratings for this specific system
+            system_data = survey_answers.get(
+                system, {"mean": 0, "practical": 0, "theoretical": 0}
+            )
+
+            # Invoke the chain for this system
+            result = chain.invoke(
+                {
+                    "system_name": system,
+                    "practical": system_data.get("practical", 0),
+                    "theoretical": system_data.get("theoretical", 0),
+                    "mean": system_data.get("mean", 0),
+                    "followup_qa": str(followup_qa),
+                }
+            )
+
+            recommendations[system] = result.must_read
+
+            # Print the decision and reasoning
+            decision = "MUST READ" if result.must_read else "SKIP"
+            print(f"[{system}] {decision}: {result.reasoning}")
+
+        except Exception as e:
+            print(f"Error evaluating {system}: {e}")
+            # Conservative default: recommend chapter on error
+            recommendations[system] = True
+
+    return recommendations
