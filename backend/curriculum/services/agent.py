@@ -123,12 +123,16 @@ def generate_followup_questions(survey_answers: dict[str, Any]) -> dict[str, str
 
 Basierend auf den Selbsteinschätzungen eines Fahrers zu verschiedenen Assistenzsystemen sollst du drei gezielte Folgefragen entwickeln.
 
-Die Bewertungsskala ist:
-- 0: Keine Erfahrung
-- 1: Sehr wenig Erfahrung
-- 2: Etwas Erfahrung
-- 3: Gute Erfahrung
-- 4: Sehr gute Erfahrung
+Die Bewertungsskala ist (0-6):
+- 0: keins (keine Erfahrung)
+- 1: sehr wenig
+- 2: wenig
+- 3: eher wenig
+- 4: eher viel
+- 5: viel
+- 6: sehr viel
+
+WICHTIG: Werte 0-3 bedeuten geringe bis mäßige Vertrautheit. Erst ab 4 beginnt gute Vertrautheit.
 
 Für jedes System gibt es:
 - practical: Praktische Erfahrung (Nutzung)
@@ -137,7 +141,7 @@ Für jedes System gibt es:
 
 Deine Aufgabe:
 1. Identifiziere Systeme, bei denen es Diskrepanzen zwischen praktischer und theoretischer Erfahrung gibt
-2. Konzentriere dich auf Systeme mit mittlerer Erfahrung (mean zwischen 1.5 und 3, oder practical/theoretical zwischen 1 und 3)
+2. Konzentriere dich auf Systeme mit geringer bis mittlerer Erfahrung (mean zwischen 1 und 4, oder practical/theoretical zwischen 1 und 4)
 3. Formuliere drei offene Fragen, die helfen, die tatsächliche Vertrautheit besser einzuschätzen
 
 KRITISCH – Diversifizierung der Fragen:
@@ -148,9 +152,9 @@ KRITISCH – Diversifizierung der Fragen:
 - VERMEIDE es, alle drei Fragen auf dasselbe System zu fokussieren
 
 Prioritäten bei der System-Auswahl:
-1. Systeme mit mean-Werten zwischen 1.5 und 2.5 (höchste Priorität – "eher wenig" bis "etwas")
-2. Systeme mit Diskrepanzen zwischen practical und theoretical (Differenz > 1)
-3. Systeme mit einzelnen Werten von 1 oder 2 (auch wenn mean höher ist)
+1. Systeme mit mean-Werten zwischen 2 und 4 (höchste Priorität – "wenig" bis "eher viel")
+2. Systeme mit Diskrepanzen zwischen practical und theoretical (Differenz >= 2)
+3. Systeme mit einzelnen Werten von 1, 2, 3 oder 4 (auch wenn mean anders ist)
 4. Falls möglich, mindestens ein System mit niedriger practical-Erfahrung und eines mit niedriger theoretical-Erfahrung
 
 WICHTIG – Ziel der Fragen:
@@ -174,7 +178,7 @@ Die Fragen sollten:
 - Den alltäglichen Umgang und die Nutzungserfahrung ansprechen
 - Einen gesprächigen, nicht prüfenden Ton haben
 - Auf Deutsch sein
-- Sich jeweils auf unterschiedliche Systeme beziehen
+- Sich jeweils auf die unterschiedlichen Systeme beziehen
 """
 
     prompt = ChatPromptTemplate.from_messages(
@@ -256,39 +260,44 @@ def generate_recommended_chapters(
 
 Deine Aufgabe ist es, basierend auf den Selbsteinschätzungen eines Fahrers zu einem SPEZIFISCHEN System und allen verfügbaren Folgefragen zu entscheiden, ob der Fahrer das entsprechende Kapitel des Fahrzeughandbuchs VOR der Fahrt lesen MUSS.
 
-Bewertungsskala:
-- 0: Keine Erfahrung
-- 1: Sehr wenig Erfahrung
-- 2: Etwas Erfahrung
-- 3: Gute Erfahrung
-- 4: Sehr gute Erfahrung
+Bewertungsskala (0-6):
+- 0: keins (keine Erfahrung)
+- 1: sehr wenig
+- 2: wenig
+- 3: eher wenig
+- 4: eher viel
+- 5: viel
+- 6: sehr viel
+
+WICHTIG: Werte 0-3 bedeuten geringe bis mäßige Vertrautheit und erfordern in der Regel das Lesen des Kapitels. Erst ab 5 kann von guter Vertrautheit ausgegangen werden.
 
 WICHTIG – Unabhängige Bewertung:
 Du bewertest NUR das aktuelle System. Die Bewertungen für andere Systeme sind irrelevant.
 
 Bewertungskriterien:
 Ein Fahrer MUSS ein Kapitel lesen (must_read: true), wenn eine oder mehrere der folgenden Bedingungen zutreffen:
-  * Die Selbsteinschätzung ist niedrig (mean < 2)
-  * practical-Wert ist 0 oder 1 (sehr wenig oder keine praktische Erfahrung)
-  * theoretical-Wert ist 0 oder 1 (sehr wenig oder kein theoretisches Wissen)
+  * Die Selbsteinschätzung ist niedrig bis mittel (mean <= 4)
+  * practical-Wert ist 0, 1, 2, 3 oder 4 (geringe bis mittlere praktische Erfahrung)
+  * theoretical-Wert ist 0, 1, 2, 3 oder 4 (geringes bis mittleres theoretisches Wissen)
   * Große Diskrepanz zwischen practical und theoretical besteht (Differenz >= 2)
   * Falls Folgefragen zu diesem System gestellt wurden: Die Antworten zeigen Unsicherheit oder fehlendes Verständnis
-  * Bei Werten von 2 ("etwas Erfahrung"): Nur wenn zusätzlich Folgeantworten Probleme aufzeigen
+  * Bei Werten von 4 ("eher viel"): Nur überspringen wenn zusätzlich Folgeantworten klare Vertrautheit zeigen
 
 Ein Fahrer MUSS NICHT lesen (must_read: false), wenn ALLE folgenden Bedingungen erfüllt sind:
-  * Gute Selbsteinschätzung (mean >= 3)
-  * Sowohl practical als auch theoretical >= 3
-  * Falls Folgefragen gestellt wurden: Antworten zeigen klare Vertrautheit
+  * Gute Selbsteinschätzung (mean >= 5)
+  * Sowohl practical als auch theoretical >= 5
+  * Falls Folgefragen gestellt wurden: Antworten zeigen klare, langjährige Vertrautheit und souveränen Umgang
 
 KRITISCH – Umgang mit Folgefragen:
 - Du erhältst NUR die Folgefragen, die sich SPEZIFISCH auf das aktuelle System beziehen
 - Wenn "Keine Folgefragen zu [System] wurden gestellt" angezeigt wird, entscheide AUSSCHLIESSLICH anhand der Survey-Werte
 - Das Fehlen von Folgefragen bedeutet NICHT, dass das System unwichtig ist
-- Niedrige Survey-Werte (practical oder theoretical <= 1) sind allein ausreichend für must_read: true
+- Niedrige bis mittlere Survey-Werte (practical oder theoretical <= 4) sind allein ausreichend für must_read: true
 - Verwende NIEMALS Informationen aus Folgefragen zu anderen Systemen
-- Wenn Folgefragen vorhanden sind, bewerte sie ehrlich: Zeigen sie echte Vertrautheit oder Unsicherheit?
+- Wenn Folgefragen vorhanden sind, bewerte sie ehrlich: Zeigen sie echte, langjährige Vertrautheit oder Unsicherheit?
 
 Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (must_read: true).
+Bei der Skala 0-6 sind nur Werte von 5-6 wirklich gut. Werte bis 4 bedeuten noch Lernbedarf.
 """
 
     prompt = ChatPromptTemplate.from_messages(
