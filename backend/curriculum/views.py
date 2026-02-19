@@ -16,6 +16,7 @@ from .schemas import (
     ErrorResponse,
     FollowUpAnswersRequest,
     FollowUpQuestionsResponse,
+    FollowUpQuestionsResponseV2,
     RecommendedChaptersResponse,
     SurveyAnswersRequest,
     UserIdRequest,
@@ -82,7 +83,7 @@ def post_survey_answers(request: Request) -> Response:
 
 @extend_schema(
     request=UserIdRequest,
-    responses={200: FollowUpQuestionsResponse, 400: ErrorResponse, 404: ErrorResponse},
+    responses={200: FollowUpQuestionsResponseV2, 400: ErrorResponse, 404: ErrorResponse},
 )
 @api_view(["POST"])
 def post_generate_followup_questions(request: Request) -> Response:
@@ -131,14 +132,18 @@ def post_generate_followup_questions(request: Request) -> Response:
             status=400,
         )
 
-    # Generate follow-up questions using the agent
-    questions = generate_followup_questions(user.survey_answers)
+    # Generate follow-up questions using the agent (returns v2 format)
+    try:
+        questions_response = generate_followup_questions(user.survey_answers)
+    except Exception as e:
+        print(f"Error generating follow-up questions: {e}")
+        return Response({"error": "Fragen konnten nicht generiert werden."}, status=500)
 
-    # Save questions to database
-    user.followup_questions = questions
+    # Save questions to database (save the full response structure)
+    user.followup_questions = questions_response
     user.save()
 
-    return Response(questions, status=200)
+    return Response(questions_response, status=200)
 
 
 @extend_schema(
@@ -196,21 +201,30 @@ def post_followup_answers(request: Request) -> Response:
             status=400,
         )
 
-    # Extract the stored questions
+    # Extract the stored questions (handle both v1 and v2 formats)
     stored_questions = user.followup_questions
-    expected_questions = [
-        stored_questions.get("question1"),
-        stored_questions.get("question2"),
-        stored_questions.get("question3"),
-    ]
+
+    # Check if it's the new v2 format with question_type
+    if isinstance(stored_questions, dict) and "question_type" in stored_questions:
+        # V2 format
+        expected_questions = [q.get("text") for q in stored_questions.get("questions", [])]
+        expected_count = len(expected_questions)
+    else:
+        # Legacy v1 format
+        expected_questions = [
+            stored_questions.get("question1"),
+            stored_questions.get("question2"),
+            stored_questions.get("question3"),
+        ]
+        expected_count = 3
 
     # Extract submitted questions
     submitted_questions = [qa.q for qa in data.answers]
 
     # Validate that submitted questions match stored questions
-    if len(submitted_questions) != 3:
+    if len(submitted_questions) != expected_count:
         return Response(
-            {"error": "Expected exactly 3 question-answer pairs"}, status=400
+            {"error": f"Expected exactly {expected_count} question-answer pairs"}, status=400
         )
 
     for submitted_q in submitted_questions:
@@ -300,9 +314,28 @@ def get_recommended_chapters(request: Request) -> Response:
             status=400,
         )
 
+    # Build a lookup from question text to favorable_answer (MC questions only)
+    favorable_answers: dict = {}
+    stored_questions = user.followup_questions
+    if (
+        isinstance(stored_questions, dict)
+        and stored_questions.get("question_type") == "multiple_choice"
+    ):
+        for q in stored_questions.get("questions", []):
+            if "favorable_answer" in q:
+                favorable_answers[q["text"]] = q["favorable_answer"]
+
+    # Enrich each submitted answer with the favorable_answer where available
+    enriched_answers = []
+    for qa in user.followup_answers:
+        enriched = dict(qa)
+        if qa.get("q") in favorable_answers:
+            enriched["favorable_answer"] = favorable_answers[qa["q"]]
+        enriched_answers.append(enriched)
+
     # Generate recommendations using the agent
     recommendations = generate_recommended_chapters(
-        user.survey_answers, user.followup_answers
+        user.survey_answers, enriched_answers
     )
 
     # Save recommendations to database

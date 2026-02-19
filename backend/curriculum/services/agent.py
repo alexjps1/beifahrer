@@ -6,12 +6,14 @@ TUM Lehrstuhl für Ergonomie
 """
 
 import os
-from typing import Any, cast
+from typing import Any, Literal, cast
 
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, SecretStr
+
+# Configuration: Question generation mode
+FOLLOWUP_QUESTION_MODE = "multiple_choice"  # Options: "open_ended", "multiple_choice"
 
 # Initialize OpenAI LLM
 _llm = None
@@ -91,9 +93,38 @@ class RecommendedChapters(BaseModel):
     )
 
 
-def generate_followup_questions(survey_answers: dict[str, Any]) -> dict[str, str]:
+def _get_relevant_systems(survey_answers: dict[str, Any]) -> dict[str, Any]:
     """
-    Generate three follow-up questions based on user's survey answers.
+    Filter survey answers to only systems where the user has partial familiarity.
+
+    A system is relevant if at least one of practical or theoretical is between
+    2 and 5 (inclusive). Systems rated 0–1 on both dimensions are excluded
+    (no real experience to probe), and systems rated 6 on both are excluded
+    (already fully familiar).
+
+    Parameters
+    ----------
+    survey_answers : dict[str, Any]
+        Full survey responses.
+
+    Returns
+    -------
+    dict[str, Any]
+        Filtered subset of survey_answers. Falls back to the full dict if the
+        filter would leave nothing.
+
+    """
+    relevant = {
+        system: data
+        for system, data in survey_answers.items()
+        if 2 <= data.get("practical", 0) <= 5 or 2 <= data.get("theoretical", 0) <= 5
+    }
+    return relevant if relevant else survey_answers
+
+
+def generate_followup_questions_open_ended(survey_answers: dict[str, Any]) -> dict[str, str]:
+    """
+    Generate three open-ended follow-up questions based on user's survey answers.
 
     Uses GPT to analyze the user's self-reported familiarity ratings and generate
     targeted questions to better understand their actual knowledge level.
@@ -115,7 +146,7 @@ def generate_followup_questions(survey_answers: dict[str, Any]) -> dict[str, str
     ...     "Abstandsregeltempomat": {"mean": 3, "practical": 3, "theoretical": 3},
     ...     "Ampelerkennung": {"mean": 1.5, "practical": 3, "theoretical": 0}
     ... }
-    >>> questions = generate_followup_questions(answers)
+    >>> questions = generate_followup_questions_open_ended(answers)
     >>> print(questions["question1"])
 
     """
@@ -144,18 +175,16 @@ Deine Aufgabe:
 2. Konzentriere dich auf Systeme mit geringer bis mittlerer Erfahrung (mean zwischen 1 und 4, oder practical/theoretical zwischen 1 und 4)
 3. Formuliere drei offene Fragen, die helfen, die tatsächliche Vertrautheit besser einzuschätzen
 
-KRITISCH – Diversifizierung der Fragen:
-- Jede der drei Fragen MUSS sich auf ein ANDERES Fahrerassistenzsystem beziehen
-- Verteile die Fragen über verschiedene Systeme, um ein breites Verständnis zu bekommen
-- Priorisiere Systeme mit "mittleren" Bewertungen (2-4), da hier die größte Unsicherheit besteht
-- Wenn mehrere Systeme in Frage kommen, wähle drei unterschiedliche aus
-- VERMEIDE es, alle drei Fragen auf dasselbe System zu fokussieren
+KRITISCH – Erlaubte Systeme:
+- Stelle Fragen AUSSCHLIESSLICH zu den Systemen, die in der Nutzernachricht unter "Stelle Fragen NUR zu den folgenden Systemen" aufgelistet sind
+- Systeme, die NICHT in dieser Liste stehen, sind verboten – auch wenn sie in den Selbsteinschätzungen auftauchen
+- Es ist ausdrücklich erlaubt (und manchmal notwendig), mehrere Fragen zum selben System zu stellen, wenn die Liste nur wenige relevante Systeme enthält
+- Versuche NICHT, die Fragen auf alle 5 Systeme zu verteilen – halte dich strikt an die erlaubte Liste
 
-Prioritäten bei der System-Auswahl:
+Prioritäten bei der System-Auswahl (nur innerhalb der erlaubten Systeme):
 1. Systeme mit mean-Werten zwischen 2 und 4 (höchste Priorität – "wenig" bis "eher viel")
 2. Systeme mit Diskrepanzen zwischen practical und theoretical (Differenz >= 2)
-3. Systeme mit einzelnen Werten von 1, 2, 3 oder 4 (auch wenn mean anders ist)
-4. Falls möglich, mindestens ein System mit niedriger practical-Erfahrung und eines mit niedriger theoretical-Erfahrung
+3. Falls möglich, mindestens ein System mit niedriger practical-Erfahrung und eines mit niedriger theoretical-Erfahrung
 
 WICHTIG – Ziel der Fragen:
 Die Fragen sollen die VERTRAUTHEIT des Fahrers mit dem System einschätzen, NICHT sein technisches Wissen abfragen. Es geht nicht darum zu testen, ob der Fahrer weiß, wie ein System funktioniert oder was er in einer kritischen Situation tun sollte. Stattdessen sollen die Fragen herausfinden, wie viel alltägliche Erfahrung und Umgang der Fahrer mit dem System hat.
@@ -186,12 +215,13 @@ Die Fragen sollten:
             ("system", system_prompt),
             (
                 "human",
-                "Hier sind die Selbsteinschätzungen des Fahrers:\n\n{survey_answers}\n\nGeneriere drei gezielte Folgefragen.",
+                "Hier sind die Selbsteinschätzungen des Fahrers:\n\n{survey_answers}\n\n"
+                "Stelle Fragen NUR zu den folgenden Systemen (alle anderen ignorieren):\n{relevant_system_names}\n\n"
+                "Generiere drei gezielte Folgefragen.",
             ),
         ]
     )
 
-    parser = JsonOutputParser(pydantic_object=FollowUpQuestions)
     llm = get_llm()
 
     # Add format instructions to the LLM
@@ -199,17 +229,222 @@ Die Fragen sollten:
 
     chain = prompt | llm_with_structure
 
-    try:
-        result = chain.invoke({"survey_answers": str(survey_answers)})
-        return result.model_dump()
-    except Exception as e:
-        print(f"Error generating follow-up questions: {e}")
-        # Return default questions on error
-        return {
-            "question1": "Wie lange nutzen Sie den Abstandsregeltempomat schon und wie regelmäßig setzen Sie ihn ein?",
-            "question2": "Ist der Spurführungsassistent in Ihrem eigenen Auto verbaut, und wenn ja, haben Sie ihn bewusst aktiviert oder läuft er automatisch?",
-            "question3": "Haben Sie den Notbremsassistenten schon einmal in Ihrem Fahrzeug bemerkt – zum Beispiel durch eine Warnung oder ein Eingreifen?",
+    relevant_systems = _get_relevant_systems(survey_answers)
+    relevant_system_names = "\n".join(
+        f"- {name} (practical={data.get('practical', 0)}, theoretical={data.get('theoretical', 0)})"
+        for name, data in relevant_systems.items()
+    )
+
+    result = cast(FollowUpQuestions, chain.invoke(
+        {
+            "survey_answers": str(relevant_systems),
+            "relevant_system_names": relevant_system_names,
         }
+    ))
+    return result.model_dump()
+
+
+class MCQuestionItem(BaseModel):
+    """Single multiple choice follow-up question with a correct answer."""
+
+    text: str
+    options: list[str] = Field(min_length=2, max_length=3)
+    format: Literal["true_false", "multiple_choice"]
+    favorable_answer: str
+
+
+class MultipleChoiceQuestions(BaseModel):
+    """
+    Schema for six multiple choice follow-up questions.
+
+    Attributes
+    ----------
+    questions : list[MCQuestionItem]
+        List of 6 questions, each with text, options, format, and favorable_answer
+    """
+
+    questions: list[MCQuestionItem] = Field(min_length=6, max_length=6)
+
+
+def generate_followup_questions_mc(survey_answers: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Generate six multiple choice follow-up questions based on user's survey answers.
+
+    Uses GPT to analyze the user's self-reported familiarity ratings and generate
+    targeted multiple choice questions (true/false or 3-option MC) to assess knowledge.
+
+    Parameters
+    ----------
+    survey_answers : dict[str, Any]
+        Survey responses with ratings for each assistant feature.
+        Format: {"Abstandsregeltempomat": {"mean": 3, "practical": 3, "theoretical": 3}, ...}
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Six multiple choice questions, each with format:
+        {"text": "...", "options": ["...", "..."], "format": "true_false" or "multiple_choice"}
+
+    Examples
+    --------
+    >>> answers = {"Abstandsregeltempomat": {"mean": 3, "practical": 3, "theoretical": 3}}
+    >>> questions = generate_followup_questions_mc(answers)
+    >>> print(questions[0]["text"])
+
+    """
+    system_prompt = """Du bist ein Experte für Fahrerassistenzsysteme und hilfst dabei, die Vertrautheit von Fahrern mit diesen Systemen einzuschätzen.
+
+Basierend auf den Selbsteinschätzungen eines Fahrers zu verschiedenen Assistenzsystemen sollst du sechs Multiple-Choice-Fragen entwickeln.
+
+Die Bewertungsskala ist (0-6):
+- 0: keins (keine Erfahrung)
+- 1: sehr wenig
+- 2: wenig
+- 3: eher wenig
+- 4: eher viel
+- 5: viel
+- 6: sehr viel
+
+WICHTIG: Werte 0-3 bedeuten geringe bis mäßige Vertrautheit. Erst ab 4 beginnt gute Vertrautheit.
+
+Für jedes System gibt es:
+- practical: Praktische Erfahrung (Nutzung)
+- theoretical: Theoretisches Wissen
+- mean: Durchschnitt beider Werte
+
+Deine Aufgabe:
+1. Identifiziere Systeme mit geringer bis mittlerer Erfahrung (mean zwischen 1 und 4, oder practical/theoretical zwischen 1 und 4)
+2. Formuliere 6 Multiple-Choice-Fragen, die die tatsächliche Vertrautheit einschätzen
+
+Fragetypen:
+- True/False (Richtig/Falsch): 2 Antwortoptionen ["Stimmt", "Stimmt nicht"]
+- Multiple Choice: Genau 3 Antwortoptionen
+
+AUSSCHLUSS – Systeme mit hoher Vertrautheit:
+- Stelle KEINE Fragen zu Systemen, bei denen practical >= 5 UND theoretical >= 5
+- Diese Systeme zeigen ausreichende Vertrautheit und müssen nicht weiter überprüft werden
+- Dies gilt auch dann, wenn dadurch weniger als 6 relevante Systeme übrig bleiben
+
+Beispiel-Ausschluss:
+  Notbremsassistent: practical=6, theoretical=6 → AUSGESCHLOSSEN, keine Frage stellen
+  Abstandsregeltempomat: practical=6, theoretical=5 → AUSGESCHLOSSEN, keine Frage stellen
+  Spurführungsassistent: practical=5, theoretical=4 → NICHT ausgeschlossen (theoretical < 5), Frage stellen
+  Ampelerkennung: practical=2, theoretical=3 → NICHT ausgeschlossen, Frage stellen
+  Verkehrszeichenassistent: practical=4, theoretical=6 → NICHT ausgeschlossen (practical < 5), Frage stellen
+
+KRITISCH – Erlaubte Systeme:
+- Stelle Fragen AUSSCHLIESSLICH zu den Systemen, die in der Nutzernachricht unter "Stelle Fragen NUR zu den folgenden Systemen" aufgelistet sind
+- Systeme, die NICHT in dieser Liste stehen, sind verboten – auch wenn sie in den Selbsteinschätzungen auftauchen
+- Es ist ausdrücklich erlaubt (und manchmal notwendig), mehrere Fragen zum selben System zu stellen, wenn die Liste nur wenige relevante Systeme enthält
+- Versuche NICHT, die Fragen auf alle 5 Systeme zu verteilen – halte dich strikt an die erlaubte Liste
+
+Diversifizierung (nur innerhalb der erlaubten Systeme):
+- Priorisiere Systeme mit "mittleren" Bewertungen (2-4)
+- Mische True/False und Multiple-Choice-Fragen
+
+Fragetypen-Mix:
+Stelle einen ausgewogenen Mix aus zwei Arten von Fragen:
+
+1. Wissens-/Verständnisfragen (ca. 50%):
+   - Ob der Fahrer weiß, wie das System aktiviert/deaktiviert wird
+   - Welche Situationen das System erkennt oder wie es den Fahrer unterstützt
+   - Typische Funktionen oder Einstellungen des Systems
+   - favorable_answer = die sachlich korrekte Antwort
+
+2. Erfahrungs-/Selbsteinschätzungsfragen (ca. 50%):
+   - Wie lange oder wie regelmäßig der Fahrer das System genutzt hat
+   - In welchem Fahrzeug das System genutzt wurde (z.B. eigenes Auto vs. Mietwagen)
+   - Ob der Fahrer das System aktiv eingesetzt oder nur passiv erlebt hat
+   - Ob der Fahrer sich sicher und komfortabel im Umgang mit dem System fühlt
+   - favorable_answer = die Antwort, die auf die meiste Erfahrung und Vertrautheit hindeutet
+     (z.B. "Ja, regelmäßig im eigenen Auto" ist günstiger als "Nur einmal in einem Mietwagen")
+
+Die Fragen sollten:
+- Klar und verständlich formuliert sein
+- Nicht zu technisch sein
+- Auf Deutsch sein
+- Einen Mix aus True/False und Multiple-Choice darstellen
+
+Format jeder Frage:
+{{
+    "text": "Fragetext hier",
+    "options": ["Option 1", "Option 2"] oder ["Option 1", "Option 2", "Option 3"],
+    "format": "true_false" oder "multiple_choice",
+    "favorable_answer": "Die bevorzugte Antwort – bei Wissensfragen die sachlich korrekte, bei Erfahrungsfragen die Antwort mit der meisten Vertrautheit (muss exakt einer der Optionen entsprechen)"
+}}
+"""
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            (
+                "human",
+                "Hier sind die Selbsteinschätzungen des Fahrers:\n\n{survey_answers}\n\n"
+                "Stelle Fragen NUR zu den folgenden Systemen (alle anderen ignorieren):\n{relevant_system_names}\n\n"
+                "Generiere sechs Multiple-Choice-Fragen.",
+            ),
+        ]
+    )
+
+    llm = get_llm()
+    llm_with_structure = llm.with_structured_output(MultipleChoiceQuestions)
+
+    chain = prompt | llm_with_structure
+
+    relevant_systems = _get_relevant_systems(survey_answers)
+    relevant_system_names = "\n".join(
+        f"- {name} (practical={data.get('practical', 0)}, theoretical={data.get('theoretical', 0)})"
+        for name, data in relevant_systems.items()
+    )
+
+    result = cast(MultipleChoiceQuestions, chain.invoke(
+        {
+            "survey_answers": str(relevant_systems),
+            "relevant_system_names": relevant_system_names,
+        }
+    ))
+    return [q.model_dump() for q in result.questions]
+
+
+def generate_followup_questions(survey_answers: dict[str, Any]) -> dict[str, Any]:
+    """
+    Router function to generate follow-up questions based on configured mode.
+
+    Calls either open-ended or multiple choice question generation based on
+    FOLLOWUP_QUESTION_MODE constant.
+
+    Parameters
+    ----------
+    survey_answers : dict[str, Any]
+        Survey responses with ratings for each assistant feature.
+        Format: {"Abstandsregeltempomat": {"mean": 3, "practical": 3, "theoretical": 3}, ...}
+
+    Returns
+    -------
+    dict[str, Any]
+        Response format depends on mode:
+        - open_ended: {"question_type": "open_ended", "questions": [{"text": "..."}, ...]}
+        - multiple_choice: {"question_type": "multiple_choice", "questions": [{...}, ...]}
+
+    """
+    if FOLLOWUP_QUESTION_MODE == "open_ended":
+        questions_dict = generate_followup_questions_open_ended(survey_answers)
+        return {
+            "question_type": "open_ended",
+            "questions": [
+                {"text": questions_dict["question1"]},
+                {"text": questions_dict["question2"]},
+                {"text": questions_dict["question3"]},
+            ],
+        }
+    elif FOLLOWUP_QUESTION_MODE == "multiple_choice":
+        questions_list = generate_followup_questions_mc(survey_answers)
+        return {"question_type": "multiple_choice", "questions": questions_list}
+    else:
+        raise ValueError(
+            f"Invalid FOLLOWUP_QUESTION_MODE: {FOLLOWUP_QUESTION_MODE}. "
+            'Must be "open_ended" or "multiple_choice".'
+        )
 
 
 def generate_recommended_chapters(
@@ -295,6 +530,9 @@ KRITISCH – Umgang mit Folgefragen:
 - Niedrige bis mittlere Survey-Werte (practical oder theoretical <= 4) sind allein ausreichend für must_read: true
 - Verwende NIEMALS Informationen aus Folgefragen zu anderen Systemen
 - Wenn Folgefragen vorhanden sind, bewerte sie ehrlich: Zeigen sie echte, langjährige Vertrautheit oder Unsicherheit?
+- Falls "Bevorzugte Antwort" angegeben ist: Vergleiche sie mit der Antwort des Fahrers.
+  * Bei Wissensfragen: Eine falsche Antwort ist ein klares Zeichen für Lernbedarf (must_read: true).
+  * Bei Erfahrungsfragen: Eine ungünstige Antwort (z.B. "Nur in Mietwagen" statt "Im eigenen Auto") deutet auf geringe Vertrautheit hin und spricht für must_read: true.
 
 Sicherheit geht vor: Im Zweifelsfall sollte das Kapitel gelesen werden (must_read: true).
 Bei der Skala 0-6 sind nur Werte von 5-6 wirklich gut. Werte bis 4 bedeuten noch Lernbedarf.
@@ -353,12 +591,15 @@ Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
             if relevant_qa:
                 followup_info = f"Folgefragen zu {system}:\n"
                 for qa in relevant_qa:
-                    followup_info += f"Frage: {qa.get('q', 'N/A')}\nAntwort: {qa.get('a', 'N/A')}\n\n"
+                    followup_info += f"Frage: {qa.get('q', 'N/A')}\n"
+                    if "favorable_answer" in qa:
+                        followup_info += f"Bevorzugte Antwort: {qa.get('favorable_answer')}\n"
+                    followup_info += f"Antwort des Fahrers: {qa.get('a', 'N/A')}\n\n"
             else:
                 followup_info = f"Keine Folgefragen zu {system} wurden gestellt."
 
             # Invoke the chain for this system
-            result = chain.invoke(
+            result = cast(SingleSystemRecommendation, chain.invoke(
                 {
                     "system_name": system,
                     "practical": system_data.get("practical", 0),
@@ -366,7 +607,7 @@ Entscheide, ob der Fahrer das Kapitel zu diesem System lesen muss.""",
                     "mean": system_data.get("mean", 0),
                     "followup_qa": followup_info,
                 }
-            )
+            ))
 
             recommendations[system] = result.must_read
 

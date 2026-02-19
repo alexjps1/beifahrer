@@ -4,6 +4,8 @@ by Alexander João Peterson Santos
 TUM Lehrstuhl für Ergonomie
 """
 
+from typing import Literal, Union
+
 from pydantic import BaseModel, Field
 
 
@@ -17,9 +19,9 @@ class DrivingAssistanceSystemRating(BaseModel):
     mean : float
         Average rating across practical and theoretical
     practical : int
-        Rating for practical understanding (0-4 scale)
+        Rating for practical understanding (0-6 scale)
     theoretical : int
-        Rating for theoretical understanding (0-4 scale)
+        Rating for theoretical understanding (0-6 scale)
     """
 
     mean: float
@@ -99,7 +101,7 @@ class UserIdRequest(BaseModel):
 
 class FollowUpQuestionsResponse(BaseModel):
     """
-    Response containing follow-up questions.
+    Response containing follow-up questions (legacy format for open-ended).
 
     Attributes
     ----------
@@ -114,6 +116,57 @@ class FollowUpQuestionsResponse(BaseModel):
     question1: str
     question2: str
     question3: str
+
+
+class OpenEndedQuestion(BaseModel):
+    """
+    Single open-ended follow-up question.
+
+    Attributes
+    ----------
+    text : str
+        The question text
+    """
+
+    text: str
+
+
+class MultipleChoiceQuestion(BaseModel):
+    """
+    Single multiple choice follow-up question.
+
+    Attributes
+    ----------
+    text : str
+        The question text
+    options : list[str]
+        Answer options (2 for true/false, 3 for multiple choice)
+    format : Literal["true_false", "multiple_choice"]
+        Question format type
+    favorable_answer : str
+        The correct answer (must be one of the options)
+    """
+
+    text: str
+    options: list[str] = Field(..., min_length=2, max_length=3)
+    format: Literal["true_false", "multiple_choice"]
+    favorable_answer: str
+
+
+class FollowUpQuestionsResponseV2(BaseModel):
+    """
+    Response containing follow-up questions (v2 format supporting multiple types).
+
+    Attributes
+    ----------
+    question_type : Literal["open_ended", "multiple_choice"]
+        Type of questions being returned
+    questions : list[Union[OpenEndedQuestion, MultipleChoiceQuestion]]
+        List of questions
+    """
+
+    question_type: Literal["open_ended", "multiple_choice"]
+    questions: list[Union[OpenEndedQuestion, MultipleChoiceQuestion]]
 
 
 class QuestionAnswerPair(BaseModel):
